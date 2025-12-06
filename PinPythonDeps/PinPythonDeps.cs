@@ -119,6 +119,12 @@ foreach (var existingRequirement in existingRequirements!)
     {
         pinnedRequirementsText.AppendLine($"{packageName}=={versionText}");
     }
+
+    else
+    {
+        // Leave it as it is
+        pinnedRequirementsText.AppendLine(existingRequirement);
+    }
 }
 
 const string PINNED_REQUIREMENTS_FILE_NAME = "requirements-pinned.txt";
