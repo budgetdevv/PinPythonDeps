@@ -1,7 +1,12 @@
 using System.Diagnostics;
 using System.Text;
 
-static bool TryGetPipFreezeOutput(out string? output)
+static bool IsCommentLine(string line)
+{
+    return line.TrimStart().StartsWith("#");
+}
+
+static bool TryGetPipFreezePackageToVersionMap(out Dictionary<string, string> pipFreezePackageToVersionMap)
 {
     var startInfo = new ProcessStartInfo
     {
@@ -15,11 +20,13 @@ static bool TryGetPipFreezeOutput(out string? output)
 
     using var process = new Process { StartInfo = startInfo };
 
+    pipFreezePackageToVersionMap = new();
+
     try
     {
         process.Start();
 
-        output = process.StandardOutput.ReadToEnd();
+        var pipFreezeText = process.StandardOutput.ReadToEnd();
 
         var error = process.StandardError.ReadToEnd();
 
@@ -30,13 +37,29 @@ static bool TryGetPipFreezeOutput(out string? output)
             throw new Exception($"Pip exited with code {process.ExitCode}: {error}");
         }
 
+        foreach (var currentPipFreezeRequirement in pipFreezeText.Split([ '\r', '\n' ], StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (IsCommentLine(currentPipFreezeRequirement))
+            {
+                continue;
+            }
+
+            var splitResult = currentPipFreezeRequirement.Split("==");
+
+            if (splitResult.Length != 2)
+            {
+                // We do not know how to handle this...
+                continue;
+            }
+
+            pipFreezePackageToVersionMap[splitResult[0]] = splitResult[1];
+        }
+
         return true;
     }
 
     catch // (Exception ex)
     {
-        output = null;
-
         return false;
     }
 }
@@ -56,7 +79,7 @@ static async Task<(bool success, string[]? contents)> TryLoadExistingRequirement
     }
 }
 
-if (!TryGetPipFreezeOutput(out var pipFreezeText))
+if (!TryGetPipFreezePackageToVersionMap(out var pipFreezePackageToVersionMap))
 {
     Console.Error.WriteLine("Failed to get pip freeze output.");
 
@@ -72,10 +95,15 @@ if (!requirementsLoaded)
     return;
 }
 
-var foundPackages = new HashSet<string>(existingRequirements!.Length);
+var pinnedRequirementsText = new StringBuilder();
 
-foreach (var existingRequirement in existingRequirements)
+foreach (var existingRequirement in existingRequirements!)
 {
+    if (IsCommentLine(existingRequirement))
+    {
+        continue;
+    }
+
     // Split the package name and version ( Handle ==, >=, <= etc )
 
     var separatorIndex = existingRequirement.IndexOfAny([ '=', '>', '<', '!', '~' ]);
@@ -87,30 +115,10 @@ foreach (var existingRequirement in existingRequirements)
         packageName = existingRequirement[..separatorIndex].Trim();
     }
 
-    foundPackages.Add(packageName);
-}
-
-var pinnedRequirementsText = new StringBuilder();
-
-foreach (var currentPipFreezeRequirement in pipFreezeText!.Split([ '\r', '\n' ], StringSplitOptions.RemoveEmptyEntries))
-{
-    var splitIndex = currentPipFreezeRequirement.IndexOf("==", StringComparison.Ordinal);
-
-    if (splitIndex == -1)
+    if (pipFreezePackageToVersionMap.TryGetValue(packageName, out var versionText))
     {
-        // We don't know how to handle this line, skip it
-        continue;
+        pinnedRequirementsText.AppendLine($"{packageName}=={versionText}");
     }
-
-    var packageName = currentPipFreezeRequirement[..splitIndex].Trim();
-
-    if (!foundPackages.Contains(packageName))
-    {
-        // The package isn't listed in requirements.txt, so skip it
-        continue;
-    }
-
-    pinnedRequirementsText.AppendLine(currentPipFreezeRequirement);
 }
 
 const string PINNED_REQUIREMENTS_FILE_NAME = "requirements-pinned.txt";
