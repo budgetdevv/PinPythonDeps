@@ -129,6 +129,10 @@ foreach (var existingRequirement in existingRequirements!)
 
 const string PINNED_REQUIREMENTS_FILE_NAME = "requirements-pinned.txt";
 
-await File.WriteAllTextAsync(PINNED_REQUIREMENTS_FILE_NAME, pinnedRequirementsText.ToString());
+var finalOutput = pinnedRequirementsText
+    .ToString()
+    .Trim();
+
+await File.WriteAllTextAsync(PINNED_REQUIREMENTS_FILE_NAME, finalOutput);
 
 Console.WriteLine($"Pinned requirements written to {PINNED_REQUIREMENTS_FILE_NAME} !");
