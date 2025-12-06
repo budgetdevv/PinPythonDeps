@@ -20,7 +20,7 @@ static bool TryGetPipFreezePackageToVersionMap(out Dictionary<string, string> pi
 
     using var process = new Process { StartInfo = startInfo };
 
-    pipFreezePackageToVersionMap = new();
+    pipFreezePackageToVersionMap = new(StringComparer.OrdinalIgnoreCase);
 
     try
     {
